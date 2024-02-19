@@ -12,7 +12,6 @@ async function main() {
   let baseURL = argv[2];
   console.log(`Starting crawler at ${baseURL}`);
   let pages = await crawlPage(baseURL, baseURL, {});
-  console.log(pages);
   let report = printReport(pages);
   console.log(report);
 }

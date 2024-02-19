@@ -42,6 +42,12 @@ async function crawlPage(baseURL, currentURL, pages) {
     normBaseURL = normalizeURL(baseURL);
     if (curURLObj.hostname != baseURLObj.hostname) {
       // We've left the target domain
+      let m = `external link`;
+      if (m in pages) {
+        pages[m] += 1;
+      } else {
+        pages[m] = 1;
+      }
       return pages;
     }
   } catch (err) {
@@ -69,8 +75,6 @@ async function crawlPage(baseURL, currentURL, pages) {
     pages[normCurURL] = 1;
   }
 
-  // console.log(`Crawling ${normCurURL}`);
-
   let response;
   let text;
   try {
@@ -88,20 +92,22 @@ async function crawlPage(baseURL, currentURL, pages) {
     console.log(
       `Server at ${normCurURL} returned error code ${response.status}.`,
     );
-    if ("server error" in pages) {
-      pages["server error"] += 1;
+    let m = `server error ${response.status}`;
+    if (m in pages) {
+      pages[m] += 1;
     } else {
-      pages["server error"] = 1;
+      pages[m] = 1;
     }
     return pages;
   }
   let type = response.headers.get("Content-Type");
   if (!type || !type.includes("text/html")) {
     console.log(`Wrong content-type at ${normCurURL}: ${type}`);
-    if ("non-html content" in pages) {
-      pages["non-html content"] += 1;
+    let m = `non-html content: ${type}`;
+    if (m in pages) {
+      pages[m] += 1;
     } else {
-      pages["non-html content"] = 1;
+      pages[m] = 1;
     }
     return pages;
   }

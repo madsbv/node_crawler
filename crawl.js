@@ -1,5 +1,6 @@
 const { JSDOM } = require("jsdom");
 
+// Throws error if url is not a valid input to URL
 function normalizeURL(url) {
   let urlObj = new URL(url);
   let result = urlObj.hostname;
@@ -19,38 +20,108 @@ function getURLsFromHTML(htmlBody, baseURL) {
   let URLs = [];
   for (let aTag of aTags) {
     let relURL = aTag.href;
-    let urlOBJ = new URL(relURL, baseURL);
-    URLs.push(urlOBJ.href);
+    try {
+      let urlOBJ = new URL(relURL, baseURL);
+      URLs.push(urlOBJ.href);
+    } catch (err) {
+      console.log(
+        `URL parsing error at domain ${baseURL} linking to ${relURL}`,
+      );
+    }
   }
   return URLs;
 }
 
-async function crawlPage(url) {
-  // 1. Fetch webpage
-  // 2. Print error and return if we hit a 400+ code
-  // 3. If content-type is not text/html, print error and return
-  // 4. Print HTML body and be done
+async function crawlPage(baseURL, currentURL, pages) {
+  let normCurURL;
+  let normBaseURL;
+  try {
+    let curURLObj = new URL(currentURL);
+    let baseURLObj = new URL(baseURL);
+    normCurURL = normalizeURL(currentURL);
+    normBaseURL = normalizeURL(baseURL);
+    if (curURLObj.hostname != baseURLObj.hostname) {
+      // We've left the target domain
+      return pages;
+    }
+  } catch (err) {
+    console.log(err);
+    console.log(
+      `One of these URLs are probably invalid: \n ${baseURL} \n ${currentURL}`,
+    );
+    if ("URL parsing error" in pages) {
+      pages["URL parsing error"] += 1;
+    } else {
+      pages["URL parsing error"] = 1;
+    }
+    return pages;
+  }
+
+  if (normCurURL in pages) {
+    // Wait a minute, we've been here before...
+    pages[normCurURL] += 1;
+    return pages;
+  }
+  if (normCurURL == normBaseURL) {
+    // This is the root call to crawlPage
+    pages[normBaseURL] = 0;
+  } else {
+    pages[normCurURL] = 1;
+  }
+
+  // console.log(`Crawling ${normCurURL}`);
 
   let response;
   let text;
   try {
-    response = await fetch(url);
+    response = await fetch(currentURL);
     text = await response.text();
   } catch (err) {
-    console.log(err);
-    return;
+    if ("fetch error" in pages) {
+      pages["fetch error"] += 1;
+    } else {
+      pages["fetch error"] = 1;
+    }
+    return pages;
   }
   if (response.status >= 400) {
-    console.log(`Server at ${url} returned error code ${response.status}.`);
-    return;
+    console.log(
+      `Server at ${normCurURL} returned error code ${response.status}.`,
+    );
+    if ("server error" in pages) {
+      pages["server error"] += 1;
+    } else {
+      pages["server error"] = 1;
+    }
+    return pages;
   }
   let type = response.headers.get("Content-Type");
-  if (!type.includes("text/html")) {
-    console.log(`Wrong content-type at ${url}: ${type}`);
-    return;
+  if (!type || !type.includes("text/html")) {
+    console.log(`Wrong content-type at ${normCurURL}: ${type}`);
+    if ("non-html content" in pages) {
+      pages["non-html content"] += 1;
+    } else {
+      pages["non-html content"] = 1;
+    }
+    return pages;
   }
 
-  console.log(text);
+  // We should now have valid html
+  let urls = getURLsFromHTML(text, baseURL);
+
+  let futures = [];
+  for (let url of urls) {
+    futures.push(crawlPage(baseURL, url, pages));
+  }
+  for (let f of futures) {
+    try {
+      pages = await f;
+    } catch (err) {
+      console.log(`Something unexpected went wrong at ${currentURL}`);
+      return pages;
+    }
+  }
+  return pages;
 }
 
 module.exports = {
